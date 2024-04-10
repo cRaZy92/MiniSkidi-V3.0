@@ -6,7 +6,7 @@
 #include <sstream>
 #include <AsyncTCP.h> // by dvarrel
 #include <WiFi.h>
-#include "SPIFFS.h"
+#include <SPIFFS.h>
 
 
 // defines
@@ -40,7 +40,6 @@ Servo auxServo;
 
 bool horizontalScreen;//When screen orientation is locked vertically this rotates the D-Pad controls so that forward would now be left.
 bool removeArmMomentum = false;
-bool light = false;
 
 struct MOTOR_PINS
 {
@@ -94,7 +93,7 @@ void rotateMotor(int motorNumber, int motorDirection)
 void moveCar(int inputValue)
 {
   Serial.printf("Got value as %d\n", inputValue);
-  if (!(horizontalScreen))
+  if (!horizontalScreen)
   {
     switch (inputValue)
     {
@@ -197,19 +196,8 @@ void auxControl(int auxServoValue)
 }
 void lightControl()
 {
-  if (!light)
-  {
-    digitalWrite(lightPin1, LOW);
-    digitalWrite(lightPin2, HIGH);
-    light = true;
-    Serial.println("Made it to lights");
-  }
-  else
-  {
-    digitalWrite(lightPin1, LOW);
-    digitalWrite(lightPin2, LOW);
-    light = false;
-  }
+  digitalWrite(lightPin1, LOW);
+  digitalWrite(lightPin2, !digitalRead(lightPin2));
 }
 
 void handleNotFound(AsyncWebServerRequest *request)
