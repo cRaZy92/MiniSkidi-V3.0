@@ -7,13 +7,15 @@
 #include <AsyncTCP.h> // by dvarrel
 #include <WiFi.h>
 #include <SPIFFS.h>
-
+#include <ESPmDNS.h>
+#include "motor.hpp"
 
 // defines
 #define bucketServoPin  23
 #define auxServoPin 22
 #define lightPin1 18
 #define lightPin2 5
+
 #define UP 1
 #define DOWN 2
 #define LEFT 3
@@ -21,13 +23,6 @@
 #define ARMUP 5
 #define ARMDOWN 6
 #define STOP 0
-
-#define RIGHT_MOTOR 1
-#define LEFT_MOTOR 0
-#define ARM_MOTOR 2
-
-#define FORWARD 1
-#define BACKWARD -1
 
 // global constants
 
@@ -41,54 +36,12 @@ Servo auxServo;
 bool horizontalScreen;//When screen orientation is locked vertically this rotates the D-Pad controls so that forward would now be left.
 bool removeArmMomentum = false;
 
-struct MOTOR_PINS
-{
-  int pinIN1;
-  int pinIN2;
-};
-
-std::vector<MOTOR_PINS> motorPins =
-{
-  {25, 26},  //RIGHT_MOTOR Pins (IN1, IN2)
-  {33, 32},  //LEFT_MOTOR  Pins
-  {21, 19}, //ARM_MOTOR pins
-};
+Motor rightMotor(25, 26);
+Motor leftMotor(33, 32);
+Motor armMotor(21, 19);
 
 AsyncWebServer server(80);
 AsyncWebSocket wsCarInput("/CarInput");
-
-
-void rotateMotor(int motorNumber, int motorDirection)
-{
-  if (motorDirection == FORWARD)
-  {
-    digitalWrite(motorPins[motorNumber].pinIN1, HIGH);
-    digitalWrite(motorPins[motorNumber].pinIN2, LOW);
-  }
-  else if (motorDirection == BACKWARD)
-  {
-    digitalWrite(motorPins[motorNumber].pinIN1, LOW);
-    digitalWrite(motorPins[motorNumber].pinIN2, HIGH);
-  }
-  else
-  {
-    if (removeArmMomentum)
-    {
-      digitalWrite(motorPins[ARM_MOTOR].pinIN1, HIGH);
-      digitalWrite(motorPins[ARM_MOTOR].pinIN2, LOW);
-      delay(10);
-      digitalWrite(motorPins[motorNumber].pinIN1, LOW);
-      digitalWrite(motorPins[motorNumber].pinIN2, LOW);
-      delay(5);
-      digitalWrite(motorPins[ARM_MOTOR].pinIN1, HIGH);
-      digitalWrite(motorPins[ARM_MOTOR].pinIN2, LOW);
-      delay(10);
-      removeArmMomentum = false;
-    }
-    digitalWrite(motorPins[motorNumber].pinIN1, LOW);
-    digitalWrite(motorPins[motorNumber].pinIN2, LOW);
-  }
-}
 
 void moveCar(int inputValue)
 {
@@ -99,105 +52,94 @@ void moveCar(int inputValue)
     {
 
       case UP:
-        rotateMotor(RIGHT_MOTOR, FORWARD);
-        rotateMotor(LEFT_MOTOR, FORWARD);
+        rightMotor.Forward();
+        leftMotor.Forward();
         break;
 
       case DOWN:
-        rotateMotor(RIGHT_MOTOR, BACKWARD);
-        rotateMotor(LEFT_MOTOR, BACKWARD);
+        rightMotor.Backward();
+        leftMotor.Backward();
         break;
 
       case LEFT:
-        rotateMotor(RIGHT_MOTOR, BACKWARD);
-        rotateMotor(LEFT_MOTOR, FORWARD);
+        rightMotor.Forward();
+        leftMotor.Backward();
         break;
 
       case RIGHT:
-        rotateMotor(RIGHT_MOTOR, FORWARD);
-        rotateMotor(LEFT_MOTOR, BACKWARD);
+        rightMotor.Backward();
+        leftMotor.Forward();
         break;
 
       case STOP:
-        rotateMotor(ARM_MOTOR, STOP);
-        rotateMotor(RIGHT_MOTOR, STOP);
-        rotateMotor(LEFT_MOTOR, STOP);
+        if(removeArmMomentum) {
+          armMotor.RemoveMomentum();
+          removeArmMomentum = false;
+        }
+        armMotor.Stop();
+        rightMotor.Stop();
+        leftMotor.Stop();
         break;
 
       case ARMUP:
-        rotateMotor(ARM_MOTOR, FORWARD);
+        armMotor.Forward();
         break;
 
       case ARMDOWN:
-        rotateMotor(ARM_MOTOR, BACKWARD);
+        armMotor.Backward();
         removeArmMomentum = true;
         break;
 
       default:
-        rotateMotor(ARM_MOTOR, STOP);
-        rotateMotor(RIGHT_MOTOR, STOP);
-        rotateMotor(LEFT_MOTOR, STOP);
+        armMotor.Stop();
+        rightMotor.Stop();
+        leftMotor.Stop();
         break;
     }
   } else {
     switch (inputValue)
     {
       case UP:
-        rotateMotor(RIGHT_MOTOR, BACKWARD);
-        rotateMotor(LEFT_MOTOR, FORWARD);
+        rightMotor.Backward();
+        leftMotor.Forward();
         break;
 
       case DOWN:
-        rotateMotor(RIGHT_MOTOR, FORWARD);
-        rotateMotor(LEFT_MOTOR, BACKWARD);
+        rightMotor.Forward();
+        leftMotor.Backward();
         break;
 
       case LEFT:
-        rotateMotor(RIGHT_MOTOR, BACKWARD);
-        rotateMotor(LEFT_MOTOR, BACKWARD);
+        rightMotor.Backward();
+        leftMotor.Backward();
         break;
 
       case RIGHT:
-        rotateMotor(RIGHT_MOTOR, FORWARD);
-        rotateMotor(LEFT_MOTOR, FORWARD);
-        break;
-
-      case STOP:
-        rotateMotor(ARM_MOTOR, STOP);
-        rotateMotor(RIGHT_MOTOR, STOP);
-        rotateMotor(LEFT_MOTOR, STOP);
+        rightMotor.Forward();
+        leftMotor.Forward();
         break;
 
       case ARMUP:
-        rotateMotor(ARM_MOTOR, FORWARD);
+        armMotor.Forward();
         break;
 
       case ARMDOWN:
-        rotateMotor(ARM_MOTOR, BACKWARD);
+        armMotor.Backward();
         removeArmMomentum = true;
         break;
 
+      case STOP:
       default:
-        rotateMotor(ARM_MOTOR, STOP);
-        rotateMotor(RIGHT_MOTOR, STOP);
-        rotateMotor(LEFT_MOTOR, STOP);
+        if(removeArmMomentum) {
+          armMotor.RemoveMomentum();
+          removeArmMomentum = false;
+        }
+        armMotor.Stop();
+        rightMotor.Stop();
+        leftMotor.Stop();
         break;
     }
   }
-}
-
-void bucketTilt(int bucketServoValue)
-{
-  bucketServo.write(bucketServoValue);
-}
-void auxControl(int auxServoValue)
-{
-  auxServo.write(auxServoValue);
-}
-void lightControl()
-{
-  digitalWrite(lightPin1, LOW);
-  digitalWrite(lightPin2, !digitalRead(lightPin2));
 }
 
 void handleNotFound(AsyncWebServerRequest *request)
@@ -240,31 +182,24 @@ void onCarInputWebSocketEvent(AsyncWebSocket *server,
         }
         else if (key == "AUX")
         {
-          auxControl(valueInt);
+          auxServo.write(valueInt);
         }
         else if (key == "Bucket")
         {
-          bucketTilt(valueInt);
+          bucketServo.write(valueInt);
         }
         else if (key == "Light")
         {
-          lightControl();
+          digitalWrite(lightPin2, !digitalRead(lightPin2));
         }
         else if (key == "Switch")
         {
-          if (!(horizontalScreen))
-          {
-            horizontalScreen = true;
-          }
-          else {
-            horizontalScreen = false;
-          }
+          horizontalScreen = !horizontalScreen;
         }
       }
       break;
     case WS_EVT_PONG:
     case WS_EVT_ERROR:
-      break;
     default:
       break;
   }
@@ -272,37 +207,47 @@ void onCarInputWebSocketEvent(AsyncWebSocket *server,
 
 void setUpPinModes()
 {
+  rightMotor.Initialize();
+  leftMotor.Initialize();
+  armMotor.Initialize();
 
-  for (int i = 0; i < motorPins.size(); i++)
-  {
-    pinMode(motorPins[i].pinIN1, OUTPUT);
-    pinMode(motorPins[i].pinIN2, OUTPUT);
-  }
-  moveCar(STOP);
   bucketServo.attach(bucketServoPin);
   auxServo.attach(auxServoPin);
-  auxControl(150);
-  bucketTilt(140);
+  auxServo.write(150);
+  bucketServo.write(140);
 
   pinMode(lightPin1, OUTPUT);
   pinMode(lightPin2, OUTPUT);
+  digitalWrite(lightPin1, LOW);
 }
-
 
 void setup(void)
 {
-  setUpPinModes();
   Serial.begin(115200);
+  setUpPinModes();
 
   if(!SPIFFS.begin(true)){
     Serial.println("An Error has occurred while mounting SPIFFS");
     return;
   }
 
-  WiFi.softAP(ssid );
+  WiFi.setHostname("miniskidi");
+
+  IPAddress Ip(192, 168, 1, 1);
+  IPAddress NMask(255, 255, 255, 0);
+  WiFi.softAPConfig(Ip, Ip, NMask);
+
+  WiFi.softAP(ssid);
   IPAddress IP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
   Serial.println(IP);
+
+  if (MDNS.begin("miniskidi")) {
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("mDNS responder started with hostname miniskidi");
+  } else {
+    Serial.println("Error setting up MDNS responder!");
+  }
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(SPIFFS, "/index.html", String(), false);
