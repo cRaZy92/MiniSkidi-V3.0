@@ -1,35 +1,12 @@
-/* ProfessorBoots
-   John Cheroske 1/6/2024
-   MiniSkidi 3.0
-
-   Thank you to the following people for contributing to this sketch
-   -TomVerr99 "Excellent Job organizing what was a very messy intial sketch"
-   -CrabRC "I dont even know where to start, but thank you for making numerous improvemnts/suggestions
-   across both mechanical designs and software."
-   -Fortinbra "Always willing to provide the discord group with a good meme or two, as well as lend a helping hand
-   in multiple ways."
-
-  Some tidbits to check
-
-  -Install the esp32 boards manager into the arduino IDE"
-  Programming Electronics Academy has a good tutorial: https://youtu.be/py91SMg_TeY?si=m1OWPBPlK-QHJ2Xx"
-  -Select "ESP32 Dev Module" under tools>Board>ESP32 Arduino before uploading sketch.
-  -The following include statements with comments "by -----" are libraries that can be installed
-  directly inside the arduino IDE under Sketch>Include Library>Manage Libraries
-*/
 #include <Arduino.h>
 
 #include <ESP32Servo.h> // by Kevin Harrington
 #include <ESPAsyncWebSrv.h> // by dvarrel
 #include <iostream>
 #include <sstream>
-
-#if defined(ESP32)
 #include <AsyncTCP.h> // by dvarrel
 #include <WiFi.h>
-#elif defined(ESP8266)
-#include <ESPAsyncTCP.h> // by dvarrel
-#endif
+#include "SPIFFS.h"
 
 
 // defines
@@ -54,8 +31,7 @@
 
 // global constants
 
-extern const char* htmlHomePage PROGMEM;
-const char* ssid     = "ProfBoots MiniSkidi OG";
+const char* ssid = "MiniSkidi";
 
 // global variables
 
@@ -223,8 +199,8 @@ void lightControl()
 {
   if (!light)
   {
-    digitalWrite(lightPin1, HIGH);
-    digitalWrite(lightPin2, LOW);
+    digitalWrite(lightPin1, LOW);
+    digitalWrite(lightPin2, HIGH);
     light = true;
     Serial.println("Made it to lights");
   }
@@ -234,11 +210,6 @@ void lightControl()
     digitalWrite(lightPin2, LOW);
     light = false;
   }
-}
-
-void handleRoot(AsyncWebServerRequest *request)
-{
-  request->send_P(200, "text/html", htmlHomePage);
 }
 
 void handleNotFound(AsyncWebServerRequest *request)
@@ -335,12 +306,24 @@ void setup(void)
   setUpPinModes();
   Serial.begin(115200);
 
+  if(!SPIFFS.begin(true)){
+    Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+
   WiFi.softAP(ssid );
   IPAddress IP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
   Serial.println(IP);
 
-  server.on("/", HTTP_GET, handleRoot);
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/index.html", String(), false);
+  });
+
+  server.on("/styles.css", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/styles.css", String(), false);
+  });
+
   server.onNotFound(handleNotFound);
 
   wsCarInput.onEvent(onCarInputWebSocketEvent);
@@ -348,7 +331,6 @@ void setup(void)
 
   server.begin();
   Serial.println("HTTP server started");
-
 }
 
 void loop()
